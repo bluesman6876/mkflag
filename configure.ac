@@ -13,7 +13,7 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
 # Checks for libraries.
-PKG_CHECK_MODULES(GDKLIB, gtk+-2.0)
+PKG_CHECK_MODULES(GDKLIB, gtk+-3.0)
 
 # Checks for header files.
 

@@ -3,8 +3,8 @@
 #include <gtk/gtk.h>
 #include "config.h"
 
-#define DRAWING_AREA_WIDTH	512
-#define DRAWING_AREA_HEIGHT	512
+#define DRAWING_AREA_WIDTH	2048
+#define DRAWING_AREA_HEIGHT	2048
 
 enum {
 	TEXT_COLOR, FLAG_COLOR, BORDER_COLOR, COLOR_NUMBER
