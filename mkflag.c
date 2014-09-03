@@ -1,6 +1,7 @@
 #include <string.h>
 #include <math.h>
 #include <gtk/gtk.h>
+#include <pango/pangocairo.h>
 #include "config.h"
 
 #define DRAWING_AREA_WIDTH	2048
@@ -18,6 +19,12 @@ static struct flag {
 		double width;
 		double x, y;
 		const char *str;
+#if defined(PANGO)
+		struct font {
+			PangoLayout *layout;
+			PangoFontDescription *desc;
+		} font;
+#endif				/* #if defined(PANGO) */
 	} text;
 	const char *fnp;
 	enum stock {
@@ -47,8 +54,40 @@ static const char *stock_name[STOCK_NUM] = {
 #define STOCK_HEIGHT		7.0
 #define RADIUS			8.0
 
-static void flag_init(cairo_t *cr, struct flag *f)
+static int flag_init(cairo_t *cr, struct flag *f)
 {
+	int retval = -1;
+#if defined(PANGO)
+	struct font *font;
+
+	font = &f->text.font;
+	memset(font, 0, sizeof(*font));
+	font->desc = pango_font_description_new();
+
+	if (!font->desc) {
+		g_error("pango_font_description_new");
+		goto exit;
+	}
+
+	pango_font_description_set_family(font->desc, "arial");
+	pango_font_description_set_weight(font->desc, PANGO_WEIGHT_BOLD);
+	pango_font_description_set_absolute_size(font->desc,
+	    FONT_SIZE * PANGO_SCALE);
+	font->layout = pango_cairo_create_layout(cr);
+
+	if (!font->layout) {
+		g_error("pango_cairo_create_layout");
+		goto exit;
+	}
+
+	pango_layout_set_font_description(font->layout, font->desc);
+	f->text.width = 100;
+	f->width = f->text.width + 2 * (MARGIN_LR + BORDER_WIDTH);
+	f->text.x = MARGIN_LR + BORDER_WIDTH;
+	f->text.y = 64;
+	f->height = 2 * 64;
+	g_debug("height %f", f->height);
+#else				/* #if defined(PANGO) */
 	cairo_text_extents_t te;
 	cairo_font_extents_t fe;
 
@@ -74,6 +113,13 @@ static void flag_init(cairo_t *cr, struct flag *f)
 	    te.height, te.x_advance, te.y_advance);
 	f->height -= te.height;
 	g_debug("height %f text %f %f", f->height, f->text.x, f->text.y);
+#endif				/* #else */
+	retval = 0;
+#if defined(PANGO)
+exit:
+#else				/* #if defined(PANGO) */
+#endif				/* #else */
+	return retval;
 }
 
 static void flag_setup(struct flag *f, enum stock stock, double scale,
@@ -115,7 +161,11 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 
 	cairo_scale(cr, f->scale, f->scale);
 	cairo_translate(cr, STOCK_HEIGHT + 1, STOCK_HEIGHT + 1);
-	flag_init(cr, &flag);
+
+	if (flag_init(cr, &flag) < 0) {
+		g_error("flag_init");
+		goto exit;
+	}
 
 	if (f->width + 2 * (BORDER_WIDTH + STOCK_HEIGHT) > DRAWING_AREA_WIDTH ||
 	    f->height + 2 * (BORDER_WIDTH + STOCK_HEIGHT) > DRAWING_AREA_WIDTH) {
@@ -221,7 +271,13 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	    f->color[TEXT_COLOR].g, f->color[TEXT_COLOR].b,
 	    f->color[TEXT_COLOR].a);
 	cairo_move_to(cr, f->text.x, f->text.y);
+#if defined(PANGO)
+	pango_layout_set_text(f->text.font.layout, f->text.str, -1);
+	pango_cairo_show_layout_line(cr,
+	    pango_layout_get_line(f->text.font.layout, 0));
+#else				/* #if defined(PANGO) */
 	cairo_show_text(cr, f->text.str);
+#endif				/* #else */
 	cs = cairo_get_target(cr);
 
 	if (!cs) {
@@ -249,6 +305,16 @@ exit:
 	if (cs) {
 		cairo_surface_destroy(cs);
 	}
+#if defined(PANGO)
+	if (f->text.font.layout) {
+		g_object_unref(f->text.font.layout);
+	}
+
+	if (f->text.font.desc) {
+		pango_font_description_free(f->text.font.desc);
+	}
+#else				/* #if defined(PANGO) */
+#endif				/* #else */
 
 	return FALSE;
 }
