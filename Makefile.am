@@ -4,7 +4,7 @@ AM_CFLAGS = \
 	-DPACKAGE_DATA_DIR=\""$(datadir)"\"\
 	$(GDKLIB_CFLAGS)\
 	-Wall\
-	-g
+	-g -O2
 
 bin_PROGRAMS = mkflag
 

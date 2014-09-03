@@ -14,27 +14,28 @@ static struct flag {
 	double scale;
 	double height;
 	double width;
-	double text_width;
-	double text_x, text_y;
-	char *text, *fnp;
-	struct stock {
-		enum style{
-			STOCK_NONE, STOCK_LEFT_TOP, STOCK_LEFT_CENTER,
-			STOCK_LEFT_BOTTOM, STOCK_TOP_LEFT, STOCK_TOP_CENTER,
-			STOCK_TOP_RIGHT, STOCK_RIGHT_TOP, STOCK_RIGHT_CENTER,
-			STOCK_RIGHT_BOTTOM, STOCK_BOTTOM_RIGHT,
-			STOCK_BOTTOM_CENTER, STOCK_BOTTOM_LEFT,	STOCK_NUM
-		} style;
+	struct text {
+		double width;
+		double x, y;
+		const char *str;
+	} text;
+	const char *fnp;
+	enum stock {
+		STOCK_NONE, STOCK_LEFT_TOP, STOCK_LEFT_CENTER,
+		STOCK_LEFT_BOTTOM, STOCK_TOP_LEFT, STOCK_TOP_CENTER,
+		STOCK_TOP_RIGHT, STOCK_RIGHT_TOP, STOCK_RIGHT_CENTER,
+		STOCK_RIGHT_BOTTOM, STOCK_BOTTOM_RIGHT,
+		STOCK_BOTTOM_CENTER, STOCK_BOTTOM_LEFT,	STOCK_NUM
 	} stock;
 	struct rgba_color {
+		double a;
 		double r;
 		double g;
 		double b;
-		double a;
 	} color[COLOR_NUMBER];
 } flag;
 
-static char *stock_name[STOCK_NUM] = {
+static const char *stock_name[STOCK_NUM] = {
 	"none", "lt", "lc", "lb", "tl", "tc", "tr", "rt", "rc", "rb", "br", "bc",
 	"bl"
 };
@@ -55,70 +56,72 @@ static void flag_init(cairo_t *cr, struct flag *f)
 	    CAIRO_FONT_WEIGHT_BOLD);
 	cairo_set_font_size(cr, FONT_SIZE);
 	cairo_font_extents (cr, &fe);
-	cairo_text_extents(cr, f->text, &te);
+	cairo_text_extents(cr, f->text.str, &te);
 	g_debug("font: ascent %f descent %f height %f max_x_advance %f "
-			"max_y_advance %f\n", fe.ascent, fe.descent, fe.height,
-			fe.max_x_advance, fe.max_y_advance);
+	    "max_y_advance %f", fe.ascent, fe.descent, fe.height,
+	    fe.max_x_advance, fe.max_y_advance);
 	g_debug("text: x_bearing %f y_bearing %f width %f height %f "
-			"x_advance %f y_advance %f\n", te.x_bearing, te.y_bearing, te.width,
-			te.height, te.x_advance, te.y_advance);
-	f->text_width = te.width;
-	f->width = f->text_width + 2 * (MARGIN_LR + BORDER_WIDTH);
-	f->text_x = MARGIN_LR + BORDER_WIDTH;
-	f->text_y = fe.height;
+	    "x_advance %f y_advance %f", te.x_bearing, te.y_bearing, te.width,
+	    te.height, te.x_advance, te.y_advance);
+	f->text.width = te.width;
+	f->width = f->text.width + 2 * (MARGIN_LR + BORDER_WIDTH);
+	f->text.x = MARGIN_LR + BORDER_WIDTH;
+	f->text.y = fe.height;
 	f->height = 2 * fe.height;
 	cairo_text_extents(cr, "о", &te);
 	g_debug("text: x_bearing %f y_bearing %f width %f height %f "
-			"x_advance %f y_advance %f\n", te.x_bearing, te.y_bearing, te.width,
-			te.height, te.x_advance, te.y_advance);
+	    "x_advance %f y_advance %f", te.x_bearing, te.y_bearing, te.width,
+	    te.height, te.x_advance, te.y_advance);
 	f->height -= te.height;
-	g_debug("height %f text %f %f\n", f->height, f->text_x, f->text_y);
+	g_debug("height %f text %f %f", f->height, f->text.x, f->text.y);
 }
 
-static void flag_setup(struct flag *f, enum style style, double scale,
-    char *text, unsigned int *color, char *fnp)
+static void flag_setup(struct flag *f, enum stock stock, double scale,
+    const char *text, const unsigned int *color, const char *fnp)
 {
 	int i;
 
 	f->scale = scale;
-	f->stock.style = style;
-	f->text = text;
+	f->stock = stock;
+	f->text.str = text;
 	f->fnp = fnp;
 
-	for (i = 0; i < COLOR_NUMBER; i++) {
-		f->color[i].r = (color[i] >> 16 & 0xff) / 255.0;
-		f->color[i].g = (color[i] >>  8 & 0xff) / 255.0;
-		f->color[i].b = (color[i] >>  0 & 0xff) / 255.0;
-		f->color[i].a = (color[i] >> 24 & 0xff) / 255.0;
+	if (color) {
+		for (i = 0; i < COLOR_NUMBER; i++) {
+			f->color[i].a = (color[i] >> 24 & 0xff) / 255.0;
+			f->color[i].r = (color[i] >> 16 & 0xff) / 255.0;
+			f->color[i].g = (color[i] >>  8 & 0xff) / 255.0;
+			f->color[i].b = (color[i] >>  0 & 0xff) / 255.0;
+		}
 	}
 }
 
 static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 {
   	struct flag *f;
-	struct stock *s;
 	const double degrees = M_PI / 180.0;
-	cairo_surface_t *cs;
+	cairo_surface_t *cs = NULL;
 	char fn[256];
 	double x, y;
 
 	f = (struct flag *)data;
 	g_assert(f);
+	g_assert(f->text.str);
+	g_assert(f->fnp);
 
-	if (!f) {
-		g_error(NULL);
-	  	return FALSE;
+	if (!f || !f->text.str || !f->fnp) {
+		goto exit;
 	}
 
 	cairo_scale(cr, f->scale, f->scale);
 	cairo_translate(cr, STOCK_HEIGHT + 1, STOCK_HEIGHT + 1);
-	s = &f->stock;
 	flag_init(cr, &flag);
 
-	/*if (f->width + f->border_width + s->height > DRAWING_AREA_WIDTH ||*/
-	/*f->height + f->border_width + s->height > DRAWING_AREA_WIDTH) {*/
-	/*g_error("image clipping!!!\n");*/
-	/*}*/
+	if (f->width + 2 * (BORDER_WIDTH + STOCK_HEIGHT) > DRAWING_AREA_WIDTH ||
+	    f->height + 2 * (BORDER_WIDTH + STOCK_HEIGHT) > DRAWING_AREA_WIDTH) {
+		g_error("image clipping!!!");
+		goto exit;
+	}
 
 	cairo_new_sub_path(cr);
 	cairo_set_source_rgba(cr, 0, 0, 0, 0);
@@ -128,12 +131,12 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	    f->color[FLAG_COLOR].g, f->color[FLAG_COLOR].b,
 	    f->color[FLAG_COLOR].a);
 
-	if (s->style == STOCK_LEFT_CENTER) {
+	if (f->stock == STOCK_LEFT_CENTER) {
 		cairo_move_to(cr, -STOCK_HEIGHT, f->height / 2);
 		cairo_line_to(cr, 0, 0);
-	} else if (s->style == STOCK_LEFT_TOP) {
+	} else if (f->stock == STOCK_LEFT_TOP) {
 		cairo_move_to(cr, -STOCK_HEIGHT, 0);
-	} else if (s->style == STOCK_LEFT_BOTTOM) {
+	} else if (f->stock == STOCK_LEFT_BOTTOM) {
 		cairo_move_to(cr, -STOCK_HEIGHT, f->height);
 		cairo_line_to(cr, 0, 0);
 	} else {
@@ -141,34 +144,34 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		    270 * degrees);
 	}
 
-	if (s->style == STOCK_TOP_LEFT) {
+	if (f->stock == STOCK_TOP_LEFT) {
 		cairo_line_to(cr, RADIUS, -STOCK_HEIGHT);
 		cairo_line_to(cr, RADIUS + STOCK_WIDTH, 0);
 	}
 
-	if (s->style == STOCK_TOP_CENTER) {
-		cairo_line_to(cr, MARGIN_LR + (f->text_width - STOCK_WIDTH) / 2,
+	if (f->stock == STOCK_TOP_CENTER) {
+		cairo_line_to(cr, MARGIN_LR + (f->text.width - STOCK_WIDTH) / 2,
 		    0);
-		cairo_line_to(cr, MARGIN_LR + f->text_width / 2, -STOCK_HEIGHT);
-		cairo_line_to(cr, MARGIN_LR + (f->text_width + STOCK_WIDTH) / 2,
+		cairo_line_to(cr, MARGIN_LR + f->text.width / 2, -STOCK_HEIGHT);
+		cairo_line_to(cr, MARGIN_LR + (f->text.width + STOCK_WIDTH) / 2,
 		    0);
 	}
 
-	if (s->style == STOCK_TOP_RIGHT) {
+	if (f->stock == STOCK_TOP_RIGHT) {
 		cairo_line_to(cr, f->width - RADIUS - STOCK_WIDTH, 0);
 		cairo_line_to(cr, f->width - RADIUS, -STOCK_HEIGHT);
 		cairo_line_to(cr, f->width - RADIUS, 0);
 	}
 
-	if (s->style == STOCK_RIGHT_CENTER) {
+	if (f->stock == STOCK_RIGHT_CENTER) {
 		cairo_line_to(cr, f->width, 0);
 		cairo_line_to(cr, f->width + BORDER_WIDTH + STOCK_HEIGHT,
 		    f->height / 2);
 		cairo_line_to(cr, f->width, f->height);
-	} else if (s->style == STOCK_RIGHT_TOP) {
+	} else if (f->stock == STOCK_RIGHT_TOP) {
 		cairo_line_to(cr, f->width + BORDER_WIDTH + STOCK_HEIGHT, 0);
 		cairo_line_to(cr, f->width, f->height);
-	} else if (s->style == STOCK_RIGHT_BOTTOM) {
+	} else if (f->stock == STOCK_RIGHT_BOTTOM) {
 		cairo_line_to(cr, f->width, 0);
 		cairo_line_to(cr, f->width + BORDER_WIDTH + STOCK_HEIGHT,
 		    f->height);
@@ -179,29 +182,29 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		    RADIUS, 0 * degrees, 90 * degrees);
 	}
 
-	if (s->style == STOCK_BOTTOM_RIGHT) {
+	if (f->stock == STOCK_BOTTOM_RIGHT) {
 		cairo_line_to(cr, f->width - RADIUS, f->height + STOCK_HEIGHT);
 		cairo_line_to(cr, f->width - RADIUS - STOCK_WIDTH, f->height);
 	}
 
-	if (s->style == STOCK_BOTTOM_CENTER) {
-		cairo_line_to(cr, MARGIN_LR + (f->text_width + STOCK_WIDTH) / 2,
+	if (f->stock == STOCK_BOTTOM_CENTER) {
+		cairo_line_to(cr, MARGIN_LR + (f->text.width + STOCK_WIDTH) / 2,
 		    f->height);
-		cairo_line_to(cr, MARGIN_LR + f->text_width / 2,
+		cairo_line_to(cr, MARGIN_LR + f->text.width / 2,
 		    f->height + STOCK_HEIGHT);
-		cairo_line_to(cr, MARGIN_LR + (f->text_width - STOCK_WIDTH) / 2,
+		cairo_line_to(cr, MARGIN_LR + (f->text.width - STOCK_WIDTH) / 2,
 		    f->height);
 	}
 
-	if (s->style == STOCK_BOTTOM_LEFT) {
+	if (f->stock == STOCK_BOTTOM_LEFT) {
 		cairo_line_to(cr, RADIUS + STOCK_WIDTH, f->height);
 		cairo_line_to(cr, RADIUS, f->height + STOCK_HEIGHT);
 		cairo_line_to(cr, RADIUS, f->height);
 	}
 
-	if (s->style == STOCK_LEFT_CENTER || s->style == STOCK_LEFT_TOP) {
+	if (f->stock == STOCK_LEFT_CENTER || f->stock == STOCK_LEFT_TOP) {
 		cairo_line_to(cr, 0, f->height);
-	} else if (s->style != STOCK_LEFT_BOTTOM) {
+	} else if (f->stock != STOCK_LEFT_BOTTOM) {
 		cairo_arc(cr, RADIUS, f->height - RADIUS, RADIUS, 90 * degrees,
 		    180 * degrees);
 	}
@@ -217,16 +220,35 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	cairo_set_source_rgba(cr, f->color[TEXT_COLOR].r,
 	    f->color[TEXT_COLOR].g, f->color[TEXT_COLOR].b,
 	    f->color[TEXT_COLOR].a);
-	cairo_move_to(cr, f->text_x, f->text_y);
-	cairo_show_text(cr, f->text);
+	cairo_move_to(cr, f->text.x, f->text.y);
+	cairo_show_text(cr, f->text.str);
 	cs = cairo_get_target(cr);
+
+	if (!cs) {
+		g_error("cairo_get_target");
+		goto exit;
+	}
+
 	x = f->width + BORDER_WIDTH + STOCK_HEIGHT + 1;
 	y = f->height + BORDER_WIDTH + STOCK_HEIGHT + 1;
 	cairo_user_to_device(cr, &x, &y);
 	cs = cairo_surface_create_for_rectangle(cs, 0, 0, x, y);
-	snprintf(fn, sizeof(fn), "%s_%s_%.1f.png", f->fnp,
-	    stock_name[f->stock.style], f->scale);
+
+	if (!cs) {
+		g_error("cairo_surface_create_for_rectangle");
+		goto exit;
+	}
+
+	if (snprintf(fn, sizeof(fn), "%s_%s_%.1f.png", f->fnp,
+	    stock_name[f->stock], f->scale) > sizeof(fn)) {
+		g_warning("file name %s truncated!!!", fn);
+	}
+
 	cairo_surface_write_to_png(cs, fn);
+exit:
+	if (cs) {
+		cairo_surface_destroy(cs);
+	}
 
 	return FALSE;
 }
@@ -272,7 +294,7 @@ int main(int argc, char *argv[])
 		case 't':
 			param.map.t = 1;
 			param.text = optarg;
-			g_debug("text tag %s\n", param.text);
+			g_debug("text tag %s", param.text);
 			break;
 
 		case 'c':
@@ -281,7 +303,7 @@ int main(int argc, char *argv[])
 			    &param.color[BORDER_COLOR]) == 3) {
 				param.map.c = 1;
 				g_debug("color text %08x flag %08x border "
-				    "%08x\n", param.color[TEXT_COLOR],
+				    "%08x", param.color[TEXT_COLOR],
 				    param.color[FLAG_COLOR],
 				    param.color[BORDER_COLOR]);
 			}
@@ -290,13 +312,13 @@ int main(int argc, char *argv[])
 		case 'f':
 			param.map.f = 1;
 			param.fnp = optarg;
-			g_debug("file name prefix %s\n", param.fnp);
+			g_debug("file name prefix %s", param.fnp);
 			break;
 
 		case 's':
 			param.map.s = 1;
 			sscanf(optarg, "%lf", &param.scale);
-			g_debug("scale %f\n", param.scale);
+			g_debug("scale %f", param.scale);
 			break;
 
 		case 'V':
@@ -310,8 +332,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (param.map.t && param.map.c && param.map.f && param.map.s) {
-		flag_setup(&flag, STOCK_NONE, param.scale, param.text,
-		    param.color, param.fnp);
+		flag_setup(&flag, 0, 0, NULL, NULL, NULL);
 		gtk_init(&argc, &argv);
 		window = gtk_offscreen_window_new();
 		drawing_area = gtk_drawing_area_new();
@@ -321,18 +342,14 @@ int main(int argc, char *argv[])
 		g_signal_connect(G_OBJECT(drawing_area), "draw",
 		    G_CALLBACK(draw_callback), &flag);
 		gtk_widget_show_all(window);
-		/*gtk_widget_queue_draw_area(window, 0, 0,*/
-		/*DRAWING_AREA_WIDTH, DRAWING_AREA_HEIGHT);*/
-		/*gdk_window_process_updates(*/
-		/*gtk_widget_get_window(window), TRUE);*/
 
-		for (c = STOCK_LEFT_TOP; c < STOCK_NUM; c++) {
+		for (c = STOCK_NONE; c < STOCK_NUM; c++) {
 			flag_setup(&flag, c, param.scale, param.text,
-					param.color, param.fnp);
+			    param.color, param.fnp);
 			gtk_widget_queue_draw_area(window, 0, 0,
-					DRAWING_AREA_WIDTH, DRAWING_AREA_HEIGHT);
+			    DRAWING_AREA_WIDTH, DRAWING_AREA_HEIGHT);
 			gdk_window_process_updates(
-					gtk_widget_get_window(window), TRUE);
+			    gtk_widget_get_window(window), TRUE);
 		}
 
 		retval = 0;
