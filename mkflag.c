@@ -36,6 +36,7 @@ static struct flag {
 			STYLE_BOTTOM_CENTER, STYLE_BOTTOM_LEFT,	STYLE_NUM
 		} style;
 		double height;
+		double width;
 	} stock;
 	struct rgba_color {
 		double a;
@@ -53,7 +54,7 @@ static const char *style_name[STYLE_NUM] = {
 #define FONT_SIZE		16.0
 #define MARGIN_LR		2.0
 #define BORDER_WIDTH		2.0
-#define STOCK_WIDTH		18.0
+/*#define f->stock.width		18.0*/
 #define RADIUS			8.0
 
 static int flag_init(cairo_t *cr, struct flag *f)
@@ -110,6 +111,7 @@ static int flag_init(cairo_t *cr, struct flag *f)
 	f->text.y = fe.height;
 	f->height = 2 * fe.height;
 	f->stock.height = f->height / 2;
+	f->stock.width = f->stock.height / 2;
 	cairo_text_extents(cr, "о", &te);
 	g_debug("text: x_bearing %f y_bearing %f width %f height %f "
 	    "x_advance %f y_advance %f", te.x_bearing, te.y_bearing, te.width,
@@ -151,7 +153,7 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	const double degrees = M_PI / 180.0;
 	cairo_surface_t *cs = NULL;
 	char fn[256];
-	double x, y;
+	double x, y, width, height;
 
 	f = (struct flag *)data;
 	g_assert(f);
@@ -169,7 +171,54 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		goto exit;
 	}
 
-	cairo_translate(cr, f->stock.height + 1, f->stock.height + 1);
+	x = y = 1;
+	width = f->width + 1;
+	height = f->height + 1;
+
+	switch (f->stock.style) {
+	case STYLE_TOP_LEFT:
+	case STYLE_TOP_RIGHT:
+	case STYLE_TOP_CENTER:
+		y += f->stock.height + 1;
+		break;
+
+	case STYLE_BOTTOM_LEFT:
+	case STYLE_BOTTOM_RIGHT:
+	case STYLE_BOTTOM_CENTER:
+		height += f->stock.height + 1;
+		break;
+
+	case STYLE_LEFT_TOP:
+	case STYLE_LEFT_CENTER:
+	case STYLE_LEFT_BOTTOM:
+		x += f->stock.height + 1;
+		break;
+
+	case STYLE_RIGHT_TOP:
+	case STYLE_RIGHT_CENTER:
+	case STYLE_RIGHT_BOTTOM:
+		width += f->stock.height + 1;
+		break;
+
+	default:
+		break;
+	}
+
+	cairo_translate(cr, x, y);
+	cs = cairo_get_target(cr);
+
+	if (!cs) {
+		g_error("cairo_get_target");
+		goto exit;
+	}
+
+	cairo_user_to_device(cr, &width, &height);
+	cs = cairo_surface_create_for_rectangle(cs, 0, 0, width, height);
+
+	if (!cs) {
+		g_error("cairo_surface_create_for_rectangle");
+		goto exit;
+	}
 
 	if (f->width + 2 * (BORDER_WIDTH + f->stock.height) >
 	    DRAWING_AREA_WIDTH ||
@@ -201,36 +250,36 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	}
 
 	if (f->stock.style == STYLE_TOP_LEFT) {
-		cairo_line_to(cr, RADIUS, -f->stock.height);
-		cairo_line_to(cr, RADIUS + STOCK_WIDTH, 0);
+		cairo_line_to(cr, 0, -f->stock.height);
+		cairo_line_to(cr, RADIUS + f->stock.width, 0);
 	}
 
 	if (f->stock.style == STYLE_TOP_CENTER) {
-		cairo_line_to(cr, MARGIN_LR + (f->text.width - STOCK_WIDTH) / 2,
+		cairo_line_to(cr, MARGIN_LR + (f->text.width - f->stock.width) / 2,
 		    0);
 		cairo_line_to(cr, MARGIN_LR + f->text.width / 2,
 		    -f->stock.height);
-		cairo_line_to(cr, MARGIN_LR + (f->text.width + STOCK_WIDTH) / 2,
+		cairo_line_to(cr, MARGIN_LR + (f->text.width + f->stock.width) / 2,
 		    0);
 	}
 
 	if (f->stock.style == STYLE_TOP_RIGHT) {
-		cairo_line_to(cr, f->width - RADIUS - STOCK_WIDTH, 0);
-		cairo_line_to(cr, f->width - RADIUS, -f->stock.height);
+		cairo_line_to(cr, f->width - RADIUS - f->stock.width, 0);
+		cairo_line_to(cr, f->width, -f->stock.height);
 		cairo_line_to(cr, f->width - RADIUS, 0);
 	}
 
 	if (f->stock.style == STYLE_RIGHT_CENTER) {
 		cairo_line_to(cr, f->width, 0);
-		cairo_line_to(cr, f->width + BORDER_WIDTH + f->stock.height,
+		cairo_line_to(cr, f->width + f->stock.height,
 		    f->height / 2);
 		cairo_line_to(cr, f->width, f->height);
 	} else if (f->stock.style == STYLE_RIGHT_TOP) {
-		cairo_line_to(cr, f->width + BORDER_WIDTH + f->stock.height, 0);
+		cairo_line_to(cr, f->width + f->stock.height, 0);
 		cairo_line_to(cr, f->width, f->height);
 	} else if (f->stock.style == STYLE_RIGHT_BOTTOM) {
 		cairo_line_to(cr, f->width, 0);
-		cairo_line_to(cr, f->width + BORDER_WIDTH + f->stock.height,
+		cairo_line_to(cr, f->width + f->stock.height,
 		    f->height);
 	} else {
 		cairo_arc(cr, f->width - RADIUS, RADIUS, RADIUS,
@@ -240,23 +289,22 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	}
 
 	if (f->stock.style == STYLE_BOTTOM_RIGHT) {
-		cairo_line_to(cr, f->width - RADIUS,
-		    f->height + f->stock.height);
-		cairo_line_to(cr, f->width - RADIUS - STOCK_WIDTH, f->height);
+		cairo_line_to(cr, f->width, f->height + f->stock.height);
+		cairo_line_to(cr, f->width - RADIUS - f->stock.width, f->height);
 	}
 
 	if (f->stock.style == STYLE_BOTTOM_CENTER) {
-		cairo_line_to(cr, MARGIN_LR + (f->text.width + STOCK_WIDTH) / 2,
+		cairo_line_to(cr, MARGIN_LR + (f->text.width + f->stock.width) / 2,
 		    f->height);
 		cairo_line_to(cr, MARGIN_LR + f->text.width / 2,
 		    f->height + f->stock.height);
-		cairo_line_to(cr, MARGIN_LR + (f->text.width - STOCK_WIDTH) / 2,
+		cairo_line_to(cr, MARGIN_LR + (f->text.width - f->stock.width) / 2,
 		    f->height);
 	}
 
 	if (f->stock.style == STYLE_BOTTOM_LEFT) {
-		cairo_line_to(cr, RADIUS + STOCK_WIDTH, f->height);
-		cairo_line_to(cr, RADIUS, f->height + f->stock.height);
+		cairo_line_to(cr, RADIUS + f->stock.width, f->height);
+		cairo_line_to(cr, 0, f->height + f->stock.height);
 		cairo_line_to(cr, RADIUS, f->height);
 	}
 
@@ -287,23 +335,6 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 #else				/* #if defined(PANGO) */
 	cairo_show_text(cr, f->text.str);
 #endif				/* #else */
-	cs = cairo_get_target(cr);
-
-	if (!cs) {
-		g_error("cairo_get_target");
-		goto exit;
-	}
-
-	x = f->width + BORDER_WIDTH + f->stock.height + 1;
-	y = f->height + BORDER_WIDTH + f->stock.height + 1;
-	cairo_user_to_device(cr, &x, &y);
-	cs = cairo_surface_create_for_rectangle(cs, 0, 0, x, y);
-
-	if (!cs) {
-		g_error("cairo_surface_create_for_rectangle");
-		goto exit;
-	}
-
 	if (snprintf(fn, sizeof(fn), "%s_%s_%.1f.png", f->fnp,
 	    style_name[f->stock.style], f->scale) > sizeof(fn)) {
 		g_warning("file name %s truncated!!!", fn);
