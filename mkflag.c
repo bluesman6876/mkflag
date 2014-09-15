@@ -26,7 +26,7 @@ static struct flag {
 		} font;
 #endif				/* #if defined(PANGO) */
 	} text;
-	const char *fnp;
+	const char *fnp, *logo;
 	struct stock {
 		enum style {
 			STYLE_NONE, STYLE_LEFT_TOP, STYLE_LEFT_CENTER,
@@ -127,7 +127,8 @@ exit:
 }
 
 static void flag_setup(struct flag *f, enum style style, double scale,
-    const char *text, const unsigned int *color, const char *fnp)
+    const char *text, const unsigned int *color, const char *fnp,
+    const char *logo)
 {
 	int i;
 
@@ -135,6 +136,7 @@ static void flag_setup(struct flag *f, enum style style, double scale,
 	f->stock.style = style;
 	f->text.str = text;
 	f->fnp = fnp;
+	f->logo = logo;
 
 	if (color) {
 		for (i = 0; i < COLOR_NUMBER; i++) {
@@ -151,6 +153,7 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
   	struct flag *f;
 	const double degrees = M_PI / 180.0;
 	cairo_surface_t *cs = NULL;
+	cairo_surface_t *logo = NULL;
 	char fn[256];
 	double x, y, width, height;
 
@@ -219,9 +222,9 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		goto exit;
 	}
 
-	if (f->width + 2 * (BORDER_WIDTH + f->stock.height) >
+	if ((f->width + 2 * (BORDER_WIDTH + f->stock.height)) * f->scale >
 	    DRAWING_AREA_WIDTH ||
-	    f->height + 2 * (BORDER_WIDTH + f->stock.height) >
+	    (f->height + 2 * (BORDER_WIDTH + f->stock.height)) * f->scale >
 	    DRAWING_AREA_WIDTH) {
 		g_error("image clipping!!!");
 		goto exit;
@@ -328,6 +331,19 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 #else				/* #if defined(PANGO) */
 	cairo_show_text(cr, f->text.str);
 #endif				/* #else */
+
+	if (f->logo) {
+		logo = cairo_image_surface_create_from_png(f->logo);
+
+		if (!logo) {
+			g_warning("logo failed %s", f->logo);
+		} else {
+			g_debug("logo");
+			cairo_set_source_surface(cr, logo, 0, 0);
+			cairo_paint_with_alpha(cr, 0);
+		}
+	}
+
 	if (snprintf(fn, sizeof(fn), "%s_%s_%.1f.png", f->fnp,
 	    style_name[f->stock.style], f->scale) > sizeof(fn)) {
 		g_warning("file name %s truncated!!!", fn);
@@ -337,6 +353,10 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 exit:
 	if (cs) {
 		cairo_surface_destroy(cs);
+	}
+
+	if (logo) {
+		cairo_surface_destroy(logo);
 	}
 #if defined(PANGO)
 	if (f->text.font.layout) {
@@ -354,11 +374,13 @@ exit:
 static void usage(void)
 {
 	printf("usage:\nmkfont [-t <\"text\"> -c <text color,flag color,"
-	    "border color> -f <file name prefix> -s <scale>] [-h] [-V]\n"
+	    "border color> -f <file name prefix> -s <scale> "\
+	    "[-l <logo file name>]] [-h] [-V]\n"
 	    "-t set text tag\n"
 	    "-c set color AARRGGBB (in hex)\n"
 	    "-f set file name prefix\n"
 	    "-s set scale\n"
+	    "-l set logo file name\n"
 	    "-h print this help\n"
 	    "-V print version\n"
 	    );
@@ -373,10 +395,11 @@ int main(int argc, char *argv[])
 			gint c	: 1;
 			gint f	: 1;
 			gint s	: 1;
+			gint l	: 1;
 			gint V	: 1;
 			gint h	: 1;
 		} map;
-		char *fnp;
+		char *fnp, *logo;
 		unsigned int color[COLOR_NUMBER];
 		char *text;
 		double scale;
@@ -387,7 +410,7 @@ int main(int argc, char *argv[])
 	g_log_set_handler(NULL, G_LOG_LEVEL_MASK, g_log_default_handler, NULL);
 	memset(&param, 0, sizeof(param));
 
-        while ((c = getopt(argc, argv, "t:c:f:s:hV")) != -1) {
+        while ((c = getopt(argc, argv, "t:c:f:s:l:hV")) != -1) {
 		switch (c) {
 		case 't':
 			param.map.t = 1;
@@ -419,6 +442,12 @@ int main(int argc, char *argv[])
 			g_debug("scale %f", param.scale);
 			break;
 
+		case 'l':
+			param.map.l = 1;
+			param.logo = optarg;
+			g_debug("logo file name %s", param.logo);
+			break;
+
 		case 'V':
 			param.map.V = 1;
 			break;
@@ -430,7 +459,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (param.map.t && param.map.c && param.map.f && param.map.s) {
-		flag_setup(&flag, 0, 0, NULL, NULL, NULL);
+		flag_setup(&flag, 0, 0, NULL, NULL, NULL, NULL);
 		gtk_init(&argc, &argv);
 		window = gtk_offscreen_window_new();
 		drawing_area = gtk_drawing_area_new();
@@ -443,7 +472,7 @@ int main(int argc, char *argv[])
 
 		for (c = STYLE_NONE; c < STYLE_NUM; c++) {
 			flag_setup(&flag, c, param.scale, param.text,
-			    param.color, param.fnp);
+			    param.color, param.fnp, param.logo);
 			gtk_widget_queue_draw_area(window, 0, 0,
 			    DRAWING_AREA_WIDTH, DRAWING_AREA_HEIGHT);
 			gdk_window_process_updates(
