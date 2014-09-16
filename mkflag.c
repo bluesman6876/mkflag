@@ -184,7 +184,6 @@ static void flag_setup(struct flag *f, enum style style, double scale,
 static void flag_logo(cairo_t *cr, struct flag *f)
 {
 	cairo_status_t status;
-	cairo_surface_t *scale_logo = NULL;
 	cairo_t *scale_cr = NULL;
 	int w, h;
 
@@ -199,17 +198,7 @@ static void flag_logo(cairo_t *cr, struct flag *f)
 		goto exit;
 	}
 
-	scale_logo = cairo_surface_create_similar(f->logo.img,
-	    cairo_surface_get_content(f->logo.img), f->logo.width,
-	    f->logo.height);
-	status = cairo_surface_status(scale_logo);
-
-	if (status != CAIRO_STATUS_SUCCESS) {
-		g_warning("%s", cairo_status_to_string(status));
-		goto exit;
-	}
-
-	scale_cr = cairo_create(scale_logo);
+	scale_cr = cairo_create(f->logo.img);
 	status = cairo_status(scale_cr);
 
 	if (status != CAIRO_STATUS_SUCCESS) {
@@ -225,19 +214,14 @@ static void flag_logo(cairo_t *cr, struct flag *f)
 	/*cairo_pattern_set_filter(cairo_get_source(scale_cr),*/
 	/*CAIRO_FILTER_BILINEAR);*/
 	cairo_paint(scale_cr);
-	cairo_set_source_surface(cr, scale_logo, MARGIN_LOGO / 2,
+	cairo_set_source_surface(cr, f->logo.img, MARGIN_LOGO / 2,
 	    MARGIN_LOGO / 2);
 	/*cairo_pattern_set_filter(cairo_get_source(cr),
 	 * CAIRO_FILTER_BILINEAR);*/
-	w = cairo_image_surface_get_width(scale_logo);
-	h = cairo_image_surface_get_height(scale_logo);
-	cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2, w, h);
+	cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2, f->logo.width,
+	    f->logo.height);
 	cairo_fill(cr);
 exit:
-	if (scale_logo) {
-		cairo_surface_destroy(scale_logo);
-	}
-
 	if (scale_cr) {
 		cairo_destroy(scale_cr);
 	}
