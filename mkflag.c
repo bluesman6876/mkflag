@@ -31,7 +31,7 @@ static struct flag {
 		const char *fn;
 		double x, y;
 		double width, height;
-		cairo_surface_t *logo;
+		cairo_surface_t *img;
 	} logo;
 	struct stock {
 		enum style {
@@ -65,6 +65,8 @@ static const char *style_name[STYLE_NUM] = {
 
 static int flag_init(cairo_t *cr, struct flag *f)
 {
+	cairo_status_t status;
+	int w, h;
 	int retval = -1;
 #if defined(PANGO)
 	struct font *font;
@@ -124,6 +126,29 @@ static int flag_init(cairo_t *cr, struct flag *f)
 	    te.height, te.x_advance, te.y_advance);
 	f->height -= te.height;
 	g_debug("height %f text %f %f", f->height, f->text.x, f->text.y);
+
+	if (!f->logo.fn) {
+		goto exit;
+	}
+
+	f->logo.img = cairo_image_surface_create_from_png(f->logo.fn);
+	status = cairo_surface_status(f->logo.img);
+
+	if (status != CAIRO_STATUS_SUCCESS) {
+		g_warning("%s", cairo_status_to_string(status));
+		goto exit;
+	}
+
+	w = cairo_image_surface_get_width(f->logo.img);
+	h = cairo_image_surface_get_height(f->logo.img);
+	g_debug("logo origin width %d height %d", w, h);
+	f->logo.height = f->height - MARGIN_LOGO;
+	f->logo.width = w * f->logo.height / h;
+	f->width += f->logo.width + MARGIN_LOGO / 2;
+	f->text.x += f->logo.width + MARGIN_LOGO / 2;
+	f->text.width += f->logo.width + MARGIN_LOGO / 2;
+	g_debug("logo new width %f height %f", f->logo.width, f->logo.height);
+exit:
 #endif				/* #else */
 	retval = 0;
 #if defined(PANGO)
@@ -159,7 +184,7 @@ static void flag_setup(struct flag *f, enum style style, double scale,
 static void flag_logo(cairo_t *cr, struct flag *f)
 {
 	cairo_status_t status;
-	cairo_surface_t *logo = NULL, *scale_logo = NULL;
+	cairo_surface_t *scale_logo = NULL;
 	cairo_t *scale_cr = NULL;
 	int w, h;
 
@@ -167,25 +192,16 @@ static void flag_logo(cairo_t *cr, struct flag *f)
 		goto exit;
 	}
 
-	logo = cairo_image_surface_create_from_png(f->logo.fn);
-	status = cairo_surface_status(logo);
+	status = cairo_surface_status(f->logo.img);
 
 	if (status != CAIRO_STATUS_SUCCESS) {
 		g_warning("%s", cairo_status_to_string(status));
 		goto exit;
 	}
 
-	w = cairo_image_surface_get_width(logo);
-	h = cairo_image_surface_get_height(logo);
-	g_debug("logo origin width %d height %d", w, h);
-	f->logo.height = f->height - MARGIN_LOGO;
-	f->logo.width = w * f->logo.height / h;
-	f->width += f->logo.width + MARGIN_LOGO;
-	f->text.x += f->logo.width + MARGIN_LOGO;
-	f->text.width += f->logo.width + MARGIN_LOGO;
-	g_debug("logo new width %f height %f", f->logo.width, f->logo.height);
-	scale_logo = cairo_surface_create_similar(logo,
-	    cairo_surface_get_content(logo), f->logo.width, f->logo.height);
+	scale_logo = cairo_surface_create_similar(f->logo.img,
+	    cairo_surface_get_content(f->logo.img), f->logo.width,
+	    f->logo.height);
 	status = cairo_surface_status(scale_logo);
 
 	if (status != CAIRO_STATUS_SUCCESS) {
@@ -201,26 +217,33 @@ static void flag_logo(cairo_t *cr, struct flag *f)
 		goto exit;
 	}
 
+	w = cairo_image_surface_get_width(f->logo.img);
+	h = cairo_image_surface_get_height(f->logo.img);
+	g_debug("scale_x %f scale_y %f", f->logo.width / w, f->logo.height / h);
 	cairo_scale(scale_cr, f->logo.width / w, f->logo.height / h);
-	cairo_set_source_surface(scale_cr, logo, 0, 0);
+	cairo_set_source_surface(scale_cr, f->logo.img, 0, 0);
+	/*cairo_pattern_set_filter(cairo_get_source(scale_cr),*/
+	/*CAIRO_FILTER_BILINEAR);*/
 	cairo_paint(scale_cr);
 	cairo_set_source_surface(cr, scale_logo, MARGIN_LOGO / 2,
 	    MARGIN_LOGO / 2);
+	/*cairo_pattern_set_filter(cairo_get_source(cr),
+	 * CAIRO_FILTER_BILINEAR);*/
 	w = cairo_image_surface_get_width(scale_logo);
 	h = cairo_image_surface_get_height(scale_logo);
 	cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2, w, h);
 	cairo_fill(cr);
 exit:
-	if (logo) {
-		cairo_surface_destroy(logo);
-	}
-
 	if (scale_logo) {
 		cairo_surface_destroy(scale_logo);
 	}
 
 	if (scale_cr) {
 		cairo_destroy(scale_cr);
+	}
+
+	if (f->logo.img) {
+		cairo_surface_destroy(f->logo.img);
 	}
 }
 
@@ -243,6 +266,9 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		goto exit;
 	}
 
+	cairo_set_source_rgba(cr, 0, 0, 0, 0);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	cairo_paint(cr);
 	cairo_scale(cr, f->scale, f->scale);
 
 	if (flag_init(cr, f) < 0) {
@@ -309,9 +335,6 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		goto exit;
 	}
 
-	cairo_set_source_rgba(cr, 0, 0, 0, 0);
-	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-	cairo_paint(cr);
 	cairo_new_sub_path(cr);
 	cairo_set_source_rgba(cr, f->color[FLAG_COLOR].r,
 	    f->color[FLAG_COLOR].g, f->color[FLAG_COLOR].b,
@@ -400,7 +423,7 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	cairo_set_source_rgba(cr, f->color[TEXT_COLOR].r,
 	    f->color[TEXT_COLOR].g, f->color[TEXT_COLOR].b,
 	    f->color[TEXT_COLOR].a);
-	cairo_move_to(cr, f->text.x + f->logo.width, f->text.y);
+	cairo_move_to(cr, f->text.x, f->text.y);
 #if defined(PANGO)
 	pango_layout_set_text(f->text.font.layout, f->text.str, -1);
 	pango_cairo_show_layout_line(cr,
