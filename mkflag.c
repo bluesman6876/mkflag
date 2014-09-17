@@ -29,9 +29,8 @@ static struct flag {
 	const char *fnp;
 	struct logo {
 		const char *fn;
-		double x, y;
 		double width, height;
-		cairo_surface_t *img;
+		GdkPixbuf *img;
 	} logo;
 	struct stock {
 		enum style {
@@ -65,8 +64,7 @@ static const char *style_name[STYLE_NUM] = {
 
 static int flag_init(cairo_t *cr, struct flag *f)
 {
-	cairo_status_t status;
-	int w, h;
+	gint w, h;
 	int retval = -1;
 #if defined(PANGO)
 	struct font *font;
@@ -131,19 +129,22 @@ static int flag_init(cairo_t *cr, struct flag *f)
 		goto exit;
 	}
 
-	f->logo.img = cairo_image_surface_create_from_png(f->logo.fn);
-	status = cairo_surface_status(f->logo.img);
-
-	if (status != CAIRO_STATUS_SUCCESS) {
-		g_warning("%s", cairo_status_to_string(status));
+	if (!gdk_pixbuf_get_file_info(f->logo.fn, &w, &h)) {
+		g_warning("gdk_pixbuf_get_file_info");
 		goto exit;
 	}
 
-	w = cairo_image_surface_get_width(f->logo.img);
-	h = cairo_image_surface_get_height(f->logo.img);
 	g_debug("logo origin width %d height %d", w, h);
 	f->logo.height = f->height - MARGIN_LOGO;
 	f->logo.width = w * f->logo.height / h;
+	f->logo.img = gdk_pixbuf_new_from_file_at_scale(f->logo.fn,
+	    f->logo.width, f->logo.height, TRUE, NULL);
+
+	if (!f->logo.img) {
+		g_warning("gdk_pixbuf_new_from_file_at_scale");
+		goto exit;
+	}
+
 	f->width += f->logo.width + MARGIN_LOGO / 2;
 	f->text.x += f->logo.width + MARGIN_LOGO / 2;
 	f->text.width += f->logo.width + MARGIN_LOGO / 2;
@@ -178,56 +179,6 @@ static void flag_setup(struct flag *f, enum style style, double scale,
 			f->color[i].g = (color[i] >>  8 & 0xff) / 255.0;
 			f->color[i].b = (color[i] >>  0 & 0xff) / 255.0;
 		}
-	}
-}
-
-static void flag_logo(cairo_t *cr, struct flag *f)
-{
-	cairo_status_t status;
-	cairo_t *scale_cr = NULL;
-	int w, h;
-
-	if (!f->logo.fn) {
-		goto exit;
-	}
-
-	status = cairo_surface_status(f->logo.img);
-
-	if (status != CAIRO_STATUS_SUCCESS) {
-		g_warning("%s", cairo_status_to_string(status));
-		goto exit;
-	}
-
-	scale_cr = cairo_create(f->logo.img);
-	status = cairo_status(scale_cr);
-
-	if (status != CAIRO_STATUS_SUCCESS) {
-		g_warning("%s", cairo_status_to_string(status));
-		goto exit;
-	}
-
-	w = cairo_image_surface_get_width(f->logo.img);
-	h = cairo_image_surface_get_height(f->logo.img);
-	g_debug("scale_x %f scale_y %f", f->logo.width / w, f->logo.height / h);
-	cairo_scale(scale_cr, f->logo.width / w, f->logo.height / h);
-	cairo_set_source_surface(scale_cr, f->logo.img, 0, 0);
-	/*cairo_pattern_set_filter(cairo_get_source(scale_cr),*/
-	/*CAIRO_FILTER_BILINEAR);*/
-	cairo_paint(scale_cr);
-	cairo_set_source_surface(cr, f->logo.img, MARGIN_LOGO / 2,
-	    MARGIN_LOGO / 2);
-	/*cairo_pattern_set_filter(cairo_get_source(cr),
-	 * CAIRO_FILTER_BILINEAR);*/
-	cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2, f->logo.width,
-	    f->logo.height);
-	cairo_fill(cr);
-exit:
-	if (scale_cr) {
-		cairo_destroy(scale_cr);
-	}
-
-	if (f->logo.img) {
-		cairo_surface_destroy(f->logo.img);
 	}
 }
 
@@ -415,7 +366,14 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 #else				/* #if defined(PANGO) */
 	cairo_show_text(cr, f->text.str);
 #endif				/* #else */
-	flag_logo(cr, f);
+	if (f->logo.img) {
+		gdk_cairo_set_source_pixbuf(cr, f->logo.img, MARGIN_LOGO / 2,
+		    MARGIN_LOGO / 2);
+		cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2,
+		    f->logo.width, f->logo.height);
+		cairo_fill(cr);
+	}
+
 	fn_len = strlen(f->fnp) + strlen(style_name[f->stock.style]) + 10;
 	fn = g_malloc(fn_len);
 
@@ -436,6 +394,10 @@ exit:
 
 	if (cs) {
 		cairo_surface_destroy(cs);
+	}
+
+	if (f->logo.img) {
+		g_object_unref(f->logo.img);
 	}
 #if defined(PANGO)
 	if (f->text.font.layout) {
