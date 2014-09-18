@@ -371,6 +371,7 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		    MARGIN_LOGO / 2);
 		cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2,
 		    f->logo.width, f->logo.height);
+		cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 		cairo_fill(cr);
 	}
 
