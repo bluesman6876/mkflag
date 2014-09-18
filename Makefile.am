@@ -11,7 +11,7 @@ bin_PROGRAMS = mkflag
 mkflag_SOURCES = \
 	mkflag.c
 
-mkflag_LDFLAGS = 
+mkflag_LDFLAGS = -lm 
 
 mkflag_LDADD = \
 	$(GDKLIB_LIBS)

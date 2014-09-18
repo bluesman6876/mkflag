@@ -64,7 +64,6 @@ static const char *style_name[STYLE_NUM] = {
 
 static int flag_init(cairo_t *cr, struct flag *f)
 {
-	gint w, h;
 	int retval = -1;
 #if defined(PANGO)
 	struct font *font;
@@ -129,26 +128,20 @@ static int flag_init(cairo_t *cr, struct flag *f)
 		goto exit;
 	}
 
-	if (!gdk_pixbuf_get_file_info(f->logo.fn, &w, &h)) {
-		g_warning("gdk_pixbuf_get_file_info");
-		goto exit;
-	}
-
-	g_debug("logo origin width %d height %d", w, h);
-	f->logo.height = f->height - MARGIN_LOGO;
-	f->logo.width = w * f->logo.height / h;
-	f->logo.img = gdk_pixbuf_new_from_file_at_scale(f->logo.fn,
-	    f->logo.width, f->logo.height, TRUE, NULL);
+	f->logo.height = round(f->height - MARGIN_LOGO);
+	f->logo.img = gdk_pixbuf_new_from_file_at_scale(f->logo.fn, -1,
+	    f->logo.height, TRUE, NULL);
 
 	if (!f->logo.img) {
 		g_warning("gdk_pixbuf_new_from_file_at_scale");
 		goto exit;
 	}
 
+	f->logo.width = gdk_pixbuf_get_width(f->logo.img);
 	f->width += f->logo.width + MARGIN_LOGO / 2;
 	f->text.x += f->logo.width + MARGIN_LOGO / 2;
 	f->text.width += f->logo.width + MARGIN_LOGO / 2;
-	g_debug("logo new width %f height %f", f->logo.width, f->logo.height);
+	g_debug("logo width %f height %f", f->logo.width, f->logo.height);
 exit:
 #endif				/* #else */
 	retval = 0;
@@ -244,6 +237,12 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		break;
 	}
 
+	width = ceil(width);
+	height = ceil(height);
+	g_debug("style %d", f->stock.style);
+	g_debug("x %f y %f width %f height %f", x, y, width, height);
+	g_debug("%f text %f stock %f logo %f", f->width, f->text.width, f->stock.height,
+	    f->logo.width);
 	cairo_translate(cr, x, y);
 	cs = cairo_get_target(cr);
 	status = cairo_surface_status(cs);
