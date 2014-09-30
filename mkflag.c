@@ -110,7 +110,7 @@ static int flag_init(cairo_t *cr, struct flag *f)
 	g_debug("text: x_bearing %f y_bearing %f width %f height %f "
 	    "x_advance %f y_advance %f", te.x_bearing, te.y_bearing, te.width,
 	    te.height, te.x_advance, te.y_advance);
-	f->text.width = te.width;
+	f->text.width = te.x_advance >= fe.height ? te.x_advance : fe.height;
 	f->width = f->text.width + 2 * (MARGIN_LR + BORDER_WIDTH);
 	f->text.x = MARGIN_LR + BORDER_WIDTH;
 	f->text.y = fe.height;
@@ -276,15 +276,15 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	cairo_arc(cr, RADIUS, RADIUS, RADIUS, 180 * degrees, 270 * degrees);
 
 	if (f->stock.style == STYLE_TOP_LEFT) {
-		cairo_line_to(cr, 0, -f->stock.height);
+		cairo_line_to(cr, 1, -f->stock.height);
 		cairo_line_to(cr, RADIUS + f->stock.width, 0);
 	} else if (f->stock.style == STYLE_TOP_CENTER) {
-		cairo_line_to(cr,
-		    MARGIN_LR + (f->text.width - f->stock.width) / 2, 0);
-		cairo_line_to(cr, MARGIN_LR + f->text.width / 2,
+		cairo_line_to(cr, MARGIN_LR + BORDER_WIDTH +
+		    (f->text.width - f->stock.width) / 2, 0);
+		cairo_line_to(cr, MARGIN_LR + BORDER_WIDTH + f->text.width / 2,
 		    -f->stock.height);
-		cairo_line_to(cr,
-		    MARGIN_LR + (f->text.width + f->stock.width) / 2, 0);
+		cairo_line_to(cr, MARGIN_LR + BORDER_WIDTH +
+		    (f->text.width + f->stock.width) / 2, 0);
 	} else if (f->stock.style == STYLE_TOP_RIGHT) {
 		cairo_line_to(cr, f->width - RADIUS - f->stock.width, 0);
 		cairo_line_to(cr, f->width, -f->stock.height);
@@ -295,7 +295,7 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 	    0 * degrees);
 
 	if (f->stock.style == STYLE_RIGHT_TOP) {
-		cairo_line_to(cr, f->width + f->stock.height, 0);
+		cairo_line_to(cr, f->width + f->stock.height, 1);
 		cairo_line_to(cr, f->width, RADIUS + f->stock.width);
 	} else if (f->stock.style == STYLE_RIGHT_CENTER) {
 		cairo_line_to(cr, f->width,
@@ -315,19 +315,18 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 
 	if (f->stock.style == STYLE_BOTTOM_RIGHT) {
 		cairo_line_to(cr, f->width, f->height + f->stock.height);
-		cairo_line_to(cr, f->width - RADIUS - f->stock.width, f->height);
+		cairo_line_to(cr, f->width - RADIUS - f->stock.width,
+		    f->height);
 	} else if (f->stock.style == STYLE_BOTTOM_CENTER) {
-		cairo_line_to(cr,
-		    MARGIN_LR + (f->text.width + f->stock.width) / 2,
-		    f->height);
-		cairo_line_to(cr, MARGIN_LR + f->text.width / 2,
+		cairo_line_to(cr, MARGIN_LR + BORDER_WIDTH +
+		    (f->text.width + f->stock.width) / 2, f->height);
+		cairo_line_to(cr, MARGIN_LR + BORDER_WIDTH + f->text.width / 2,
 		    f->height + f->stock.height);
-		cairo_line_to(cr,
-		    MARGIN_LR + (f->text.width - f->stock.width) / 2,
-		    f->height);
+		cairo_line_to(cr, MARGIN_LR + BORDER_WIDTH +
+		    (f->text.width - f->stock.width) / 2, f->height);
 	} else if (f->stock.style == STYLE_BOTTOM_LEFT) {
 		cairo_line_to(cr, RADIUS + f->stock.width, f->height);
-		cairo_line_to(cr, 0, f->height + f->stock.height);
+		cairo_line_to(cr, 1, f->height + f->stock.height);
 		cairo_line_to(cr, RADIUS, f->height);
 	}
 
@@ -343,7 +342,7 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 		cairo_line_to(cr, 0, (f->height - f->stock.width) / 2);
 	} else if (f->stock.style == STYLE_LEFT_TOP) {
 		cairo_line_to(cr, 0, RADIUS + f->stock.width);
-		cairo_line_to(cr, -f->stock.height, 0);
+		cairo_line_to(cr, -f->stock.height, 1);
 		cairo_line_to(cr, 0, RADIUS);
 	}
 
