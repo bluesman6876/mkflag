@@ -103,6 +103,8 @@ static int flag_init(cairo_t *cr, struct flag *f)
 	    CAIRO_FONT_WEIGHT_BOLD);
 	cairo_set_font_size(cr, FONT_SIZE);
 	cairo_font_extents (cr, &fe);
+	cairo_text_extents(cr, "СПБГУТ", &te);
+	f->text.width = te.x_advance;
 	cairo_text_extents(cr, f->text.str, &te);
 	g_debug("font: ascent %f descent %f height %f max_x_advance %f "
 	    "max_y_advance %f", fe.ascent, fe.descent, fe.height,
@@ -110,9 +112,9 @@ static int flag_init(cairo_t *cr, struct flag *f)
 	g_debug("text: x_bearing %f y_bearing %f width %f height %f "
 	    "x_advance %f y_advance %f", te.x_bearing, te.y_bearing, te.width,
 	    te.height, te.x_advance, te.y_advance);
-	f->text.width = te.x_advance >= fe.height ? te.x_advance : fe.height;
+	f->text.width = fmax(f->text.width, te.x_advance);
 	f->width = f->text.width + 2 * (MARGIN_LR + BORDER_WIDTH);
-	f->text.x = MARGIN_LR + BORDER_WIDTH;
+	f->text.x = (f->width - te.x_advance) / 2;
 	f->text.y = fe.height;
 	f->height = 2 * fe.height;
 	f->stock.height = f->height / 2;
@@ -128,7 +130,8 @@ static int flag_init(cairo_t *cr, struct flag *f)
 		goto exit;
 	}
 
-	f->logo.height = round(f->height - MARGIN_LOGO);
+	cairo_text_extents(cr, "О", &te);
+	f->logo.height = round(te.x_advance);
 	f->logo.img = gdk_pixbuf_new_from_file_at_scale(f->logo.fn, -1,
 	    f->logo.height, TRUE, NULL);
 
@@ -366,9 +369,10 @@ static gboolean draw_callback(GtkWidget *widget, cairo_t *cr, gpointer data)
 #endif				/* #else */
 	if (f->logo.img) {
 		gdk_cairo_set_source_pixbuf(cr, f->logo.img, MARGIN_LOGO / 2,
-		    MARGIN_LOGO / 2);
-		cairo_rectangle(cr, MARGIN_LOGO / 2, MARGIN_LOGO / 2,
-		    f->logo.width, f->logo.height);
+		    (f->height - f->logo.height) / 2);
+		cairo_rectangle(cr, MARGIN_LOGO / 2,
+		    (f->height - f->logo.height) / 2, f->logo.width,
+		    f->logo.height);
 		cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 		cairo_fill(cr);
 	}
